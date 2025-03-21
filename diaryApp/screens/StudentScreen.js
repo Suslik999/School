@@ -6,7 +6,7 @@ const StudentScreen = () => {
   const [grades, setGrades] = useState([]);
 
   useEffect(() => {
-    axios.get("http://localhost:5000/api/grades")
+    axios.get("http://192.168.1.72:5000/api/grades") 
       .then(({ data }) => setGrades(data))
       .catch(() => alert("Error"));
   }, []);

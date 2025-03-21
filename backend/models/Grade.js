@@ -1,11 +1,12 @@
 const mongoose = require("mongoose");
 
-const GradeSchema = new mongoose.Schema({
-  studentId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  subject: { type: String, required: true },
-  grade: { type: Number, required: true },
-  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  createdAt: { type: Date, default: Date.now }
-});
+const GradeSchema = new mongoose.Schema(
+  {
+    student: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    subject: { type: String, required: true },
+    score: { type: Number, required: true },
+  },
+  { timestamps: true }
+);
 
 module.exports = mongoose.model("Grade", GradeSchema);
