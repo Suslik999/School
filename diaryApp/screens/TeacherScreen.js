@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Button, Alert } from "react-native";
 import axios from "axios";
-import { Picker } from "@react-native-picker/picker";
+import { Picker } from "@react-native-picker/picker"; 
 
 const API_URL = "http://192.168.1.72:5000"; 
 
@@ -14,9 +14,7 @@ const TeacherScreen = () => {
   const [score, setScore] = useState("");
 
   useEffect(() => {
-    axios.get("http://192.168.1.72:5000/api/users?role=student") 
-      .then(({ data }) => setStudents(data))
-      .catch(() => alert("Error"));
+    fetchStudents();
   }, []);
 
   const fetchStudents = async () => {
@@ -29,15 +27,23 @@ const TeacherScreen = () => {
   };
 
   const addGrade = async () => {
-    if (!selectedStudent || !subject || !score) return alert("Fill fields");
+    if (!selectedStudent || !selectedSubject || !score) {
+      Alert.alert("Fill fields");
+      return;
+    }
 
-    await axios.post("http://192.168.1.72:5000/api/grades", { 
-      student: selectedStudent,
-      subject,
-      score: parseInt(score),
-    });
+    try {
+      await axios.post(`${API_URL}/api/grades`, {
+        student: selectedStudent,
+        subject: selectedSubject,
+        score: parseInt(score),
+      });
 
-    alert("Success");
+      Alert.alert("Success");
+      setScore(""); 
+    } catch (error) {
+      Alert.alert("Error");
+    }
   };
 
   return (
@@ -62,13 +68,10 @@ const TeacherScreen = () => {
         value={score} 
         onChangeText={setScore} 
         keyboardType="numeric" 
-        placeholder="Enter grade"
+        placeholder=""
         style={{ borderWidth: 1, padding: 5, marginBottom: 10 }}
       />
-      <Text>Subject:</Text>
-      <TextInput value={subject} onChangeText={setSubject} />
-      <Text>Grade:</Text>
-      <TextInput value={score} onChangeText={setScore} keyboardType="numeric" />
+
       <Button title="Add" onPress={addGrade} />
     </View>
   );

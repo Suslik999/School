@@ -7,9 +7,16 @@ const StudentScreen = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axios.get("http://192.168.1.72:5000/api/grades") 
-      .then(({ data }) => setGrades(data))
-      .catch(() => alert("Error"));
+    axios.get("http://192.168.1.72:5000/api/grades")
+      .then(({ data }) => {
+        console.log("Grades:", data);
+        setGrades(data);
+      })
+      .catch((error) => {
+        console.error("Grades error:", error);
+        alert("Error");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
