@@ -12,7 +12,7 @@ router.post("/register", async (req, res) => {
 
   try {
     await user.save();
-    res.status(201).json({ message: "User was created" });
+    res.status(201).json({ message: "User created" });
   } catch (error) {
     res.status(400).json({ error: "Reg error" });
   }
@@ -23,7 +23,7 @@ router.post("/login", async (req, res) => {
   const user = await User.findOne({ email });
 
   if (!user || !(await bcrypt.compare(password, user.password))) {
-    return res.status(400).json({ error: "Incorrect data" });
+    return res.status(400).json({ error: "incorrect" });
   }
 
   const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1h" });

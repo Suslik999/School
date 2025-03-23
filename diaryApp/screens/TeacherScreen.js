@@ -14,7 +14,9 @@ const TeacherScreen = () => {
   const [score, setScore] = useState("");
 
   useEffect(() => {
-    fetchStudents();
+    axios.get("http://192.168.1.72:5000/api/users?role=student") 
+      .then(({ data }) => setStudents(data))
+      .catch(() => alert("Error"));
   }, []);
 
   const fetchStudents = async () => {
@@ -27,23 +29,15 @@ const TeacherScreen = () => {
   };
 
   const addGrade = async () => {
-    if (!selectedStudent || !selectedSubject || !score) {
-      Alert.alert("Fill fields");
-      return;
-    }
+    if (!selectedStudent || !subject || !score) return alert("Fill fields");
 
-    try {
-      await axios.post(`${API_URL}/api/grades`, {
-        student: selectedStudent,
-        subject: selectedSubject,
-        score: parseInt(score),
-      });
+    await axios.post("http://192.168.1.72:5000/api/grades", { 
+      student: selectedStudent,
+      subject,
+      score: parseInt(score),
+    });
 
-      Alert.alert("Success!");
-      setScore(""); 
-    } catch (error) {
-      Alert.alert("Error");
-    }
+    alert("Success");
   };
 
   return (
@@ -71,7 +65,10 @@ const TeacherScreen = () => {
         placeholder="Enter grade"
         style={{ borderWidth: 1, padding: 5, marginBottom: 10 }}
       />
-
+      <Text>Subject:</Text>
+      <TextInput value={subject} onChangeText={setSubject} />
+      <Text>Grade:</Text>
+      <TextInput value={score} onChangeText={setScore} keyboardType="numeric" />
       <Button title="Add" onPress={addGrade} />
     </View>
   );

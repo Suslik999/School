@@ -8,7 +8,7 @@ const LoginScreen = ({ navigation }) => {
 
   const login = async () => {
     try {
-      const { data } = await axios.post("http://localhost:5000/api/auth/login", { email, password });
+      const { data } = await axios.post("http://192.168.1.72:5000/api/auth/login", { email, password });
       alert(`Welcome, ${data.role}`);
       navigation.navigate(data.role === "teacher" ? "TeacherScreen" : "StudentScreen");
     } catch {

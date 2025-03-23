@@ -1,23 +1,45 @@
 const express = require("express");
 const Grade = require("../models/Grade");
-const auth = require("../middleware/auth");
 
 const router = express.Router();
 
-router.get("/", auth, async (req, res) => {
-  const grades = req.user.role === "teacher"
-    ? await Grade.find().populate("student")
-    : await Grade.find({ student: req.user.id });
+router.get("/", async (req, res) => {
+  try {
+    const { studentId } = req.query;
 
-  res.json(grades);
+    if (!studentId || studentId === "undefined") {
+      return res.status(400).json({ message: "Error student ID" });
+    }
+
+    const grades = await Grade.find({ student: studentId }).populate("student");
+
+    if (!grades.length) {
+      return res.status(404).json({ message: "Grade no found" });
+    }
+
+    res.json(grades);
+  } catch (error) {
+    console.error("Error", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
 });
+router.post("/", async (req, res) => {
+  const { student, subject, score } = req.body;
 
-router.post("/", auth, async (req, res) => {
-  if (req.user.role !== "teacher") return res.status(403).json({ error: "No access" });
+  if (!student || !subject || !score) {
+    return res.status(400).json({ message: "All fields important!" });
+  }
 
-  const grade = new Grade(req.body);
-  await grade.save();
-  res.status(201).json(grade);
+  try {
+
+    const newGrade = new Grade({ student, subject, score });
+    await newGrade.save();
+
+    res.status(201).json({ message: "Siccess", grade: newGrade });
+  } catch (error) {
+    console.error("Error", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
 });
 
 module.exports = router;
