@@ -5,7 +5,13 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const grades = await Grade.find().populate("student");
+    const query = {};
+
+    if (req.query.student) {
+      query.student = req.query.student;
+    }
+
+    const grades = await Grade.find(query).populate("student");
     res.json(grades);
   } catch (error) {
     console.error("Grades error", error);

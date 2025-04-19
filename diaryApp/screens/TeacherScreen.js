@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, Button, Alert, FlatList, TouchableOpacity, StyleSheet } from "react-native";
+import {
+  View, Text, TextInput, Alert,
+  FlatList, TouchableOpacity, StyleSheet, ScrollView
+} from "react-native";
 import axios from "axios";
 import { Picker } from "@react-native-picker/picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -51,7 +54,6 @@ const TeacherScreen = () => {
   };
 
   const resetForm = () => {
-    setSelectedStudent("");
     setSelectedSubject(subjects[0]);
     setScore("");
     setEditingId(null);
@@ -90,7 +92,6 @@ const TeacherScreen = () => {
   };
 
   const handleEdit = (grade) => {
-    setSelectedStudent(grade.student._id);
     setSelectedSubject(grade.subject);
     setScore(grade.score.toString());
     setEditingId(grade._id);
@@ -109,83 +110,171 @@ const TeacherScreen = () => {
     }
   };
 
-  return (
-    <View style={{ padding: 20 }}>
-      <Text style={styles.title}>{editingId ? "Edit Grade" : "Add Grade"}</Text>
+  const filteredGrades = grades.filter((g) => g.student?._id === selectedStudent);
 
-      <Text>Select student:</Text>
-      <Picker selectedValue={selectedStudent} onValueChange={setSelectedStudent}>
+  return (
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
+      <Text style={styles.title}>Manage Grades</Text>
+
+      <Text style={styles.label}>Select student:</Text>
+      <Picker
+        selectedValue={selectedStudent}
+        onValueChange={setSelectedStudent}
+        style={styles.picker}
+      >
         <Picker.Item label="Select student" value="" />
         {students.map((s) => (
           <Picker.Item key={s._id} label={s.name} value={s._id} />
         ))}
       </Picker>
 
-      <Text style={{ marginTop: 10 }}>Select subject:</Text>
-      <Picker selectedValue={selectedSubject} onValueChange={setSelectedSubject}>
-        {subjects.map((subject, index) => (
-          <Picker.Item key={index} label={subject} value={subject} />
-        ))}
-      </Picker>
+      {selectedStudent !== "" && (
+        <>
+          <Text style={styles.label}>Select subject:</Text>
+          <Picker
+            selectedValue={selectedSubject}
+            onValueChange={setSelectedSubject}
+            style={styles.picker}
+          >
+            {subjects.map((subject, index) => (
+              <Picker.Item key={index} label={subject} value={subject} />
+            ))}
+          </Picker>
 
-      <Text style={{ marginTop: 10 }}>Grade:</Text>
-      <TextInput
-        value={score}
-        onChangeText={setScore}
-        keyboardType="numeric"
-        style={styles.input}
-      />
+          <Text style={styles.label}>Grade:</Text>
+          <TextInput
+            value={score}
+            onChangeText={setScore}
+            keyboardType="numeric"
+            style={styles.input}
+          />
 
-      <Button title={editingId ? "Update Grade" : "Add Grade"} onPress={handleSubmit} />
-
-      <Text style={[styles.title, { marginTop: 20 }]}>All Grades</Text>
-
-      <FlatList
-        data={grades}
-        keyExtractor={(item) => item._id}
-        renderItem={({ item }) => (
-          <View style={styles.gradeItem}>
-            <Text style={{ flex: 1 }}>
-              {item.student?.name || "Unknown"} | {item.subject}: {item.score}
+          <TouchableOpacity style={styles.addButton} onPress={handleSubmit}>
+            <Text style={styles.addButtonText}>
+              {editingId ? "Update Grade" : "Add Grade"}
             </Text>
-            <TouchableOpacity onPress={() => handleEdit(item)}>
-              <Text style={styles.editBtn}>Edit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(item._id)}>
-              <Text style={styles.deleteBtn}>Delete</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      />
-    </View>
+          </TouchableOpacity>
+
+          <Text style={[styles.title, { marginTop: 30 }]}>Grades of Selected Student</Text>
+
+          {filteredGrades.length === 0 ? (
+            <Text style={{ color: "#888", fontStyle: "italic" }}>No grades yet</Text>
+          ) : (
+            <FlatList
+              data={filteredGrades}
+              keyExtractor={(item) => item._id}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <View style={styles.gradeItem}>
+                  <Text style={styles.gradeText}>
+                    {item.subject}: {item.score}
+                  </Text>
+                  <View style={styles.buttons}>
+                    <TouchableOpacity style={styles.editButton} onPress={() => handleEdit(item)}>
+                      <Text style={styles.buttonText}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(item._id)}>
+                      <Text style={styles.buttonText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            />
+          )}
+        </>
+      )}
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
+  scroll: {
+    padding: 20,
+  },
   title: {
     fontWeight: "bold",
-    fontSize: 18,
-    marginBottom: 10,
+    fontSize: 24,
+    marginBottom: 15,
+    color: "#333",
+    textAlign: "center",
+  },
+  label: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#555",
+  },
+  picker: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    backgroundColor: "#f5f5f5",
+    marginBottom: 12,
   },
   input: {
     borderWidth: 1,
-    padding: 5,
-    marginBottom: 10,
+    borderColor: "#ccc",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+    fontSize: 16,
+  },
+  addButton: {
+    backgroundColor: "#4a90e2",
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginTop: 10,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+    textTransform: "uppercase",
   },
   gradeItem: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
+    backgroundColor: "#f5f5f5",
+    padding: 12,
+    marginVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
   },
-  editBtn: {
-    color: "blue",
-    marginHorizontal: 5,
+  gradeText: {
+    flex: 1,
+    fontSize: 16,
+    color: "#333",
   },
-  deleteBtn: {
-    color: "red",
-    marginHorizontal: 5,
+  buttons: {
+    flexDirection: "row",
+  },
+  editButton: {
+    backgroundColor: "#4a90e2",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  deleteButton: {
+    backgroundColor: "#e94e4e",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "600",
   },
 });
 

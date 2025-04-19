@@ -10,19 +10,22 @@ const StudentScreen = () => {
   const fetchGrades = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
-
-      if (!token) {
+      const studentId = await AsyncStorage.getItem("userId");
+  
+      if (!token || !studentId) {
         alert("Not authenticated");
         return;
       }
-
-      const { data } = await axios.get("http://192.168.1.72:5000/api/grades", {
-        headers: {
-          Authorization: token,
-        },
-      });
-
-      console.log("Grades:", data);
+  
+      const { data } = await axios.get(
+        `http://192.168.1.72:5000/api/grades?student=${studentId}`,
+        {
+          headers: {
+            Authorization: token,
+          },
+        }
+      );
+  
       setGrades(data);
     } catch (error) {
       console.error("Grades error:", error);
@@ -31,6 +34,7 @@ const StudentScreen = () => {
       setLoading(false);
     }
   };
+  
 
   useEffect(() => {
     fetchGrades();
@@ -82,7 +86,7 @@ const styles = StyleSheet.create({
   },
   tableHeader: {
     flexDirection: "row",
-    backgroundColor: "#007bff",
+    backgroundColor: "#4a90e2",
     padding: 10,
     borderRadius: 5,
   },
