@@ -1,22 +1,39 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, ActivityIndicator, StyleSheet } from "react-native";
 import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const StudentScreen = () => {
   const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchGrades = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token"); // предполагаем, что токен хранится под ключом "token"
+
+      if (!token) {
+        alert("Not authenticated");
+        return;
+      }
+
+      const { data } = await axios.get("http://192.168.1.72:5000/api/grades", {
+        headers: {
+          Authorization: token,
+        },
+      });
+
+      console.log("Grades:", data);
+      setGrades(data);
+    } catch (error) {
+      console.error("Grades error:", error);
+      alert("Failed to load grades");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    axios.get("http://192.168.1.72:5000/api/grades")
-      .then(({ data }) => {
-        console.log("Grades:", data);
-        setGrades(data);
-      })
-      .catch((error) => {
-        console.error("Grades error:", error);
-        alert("Error");
-      })
-      .finally(() => setLoading(false));
+    fetchGrades();
   }, []);
 
   if (loading) {

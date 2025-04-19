@@ -1,0 +1,450 @@
+middleware/auth.js
+const jwt = require("jsonwebtoken");
+
+module.exports = (req, res, next) => {
+  const token = req.header("Authorization");
+  if (!token) return res.status(401).json({ error: "Нет доступа" });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    res.status(403).json({ error: "Неверный токен" });
+  }
+};
+
+models/Grade.js
+const mongoose = require("mongoose");
+
+const GradeSchema = new mongoose.Schema(
+  {
+    student: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    subject: { type: String, required: true },
+    score: { type: Number, required: true },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("Grade", GradeSchema);
+
+User.js
+const mongoose = require("mongoose");
+
+const UserSchema = new mongoose.Schema({
+  name: String,
+  email: { type: String, unique: true },
+  password: String,
+  role: { type: String, enum: ["student", "teacher"], required: true },
+});
+
+module.exports = mongoose.model("User", UserSchema);
+
+routes/auth.js
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+
+const router = express.Router();
+
+router.post("/register", async (req, res) => {
+  const { name, email, password, role } = req.body;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const user = new User({ name, email, password: hashedPassword, role });
+
+  try {
+    await user.save();
+    res.status(201).json({ message: "User created" });
+  } catch (error) {
+    res.status(400).json({ error: "Reg error" });
+  }
+});
+
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  const user = await User.findOne({ email });
+
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return res.status(400).json({ error: "incorrect" });
+  }
+
+  const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  res.json({ token, role: user.role });
+});
+
+module.exports = router;
+
+routes/grades.js
+const express = require("express");
+const Grade = require("../models/Grade");
+
+const router = express.Router();
+
+router.get("/", async (req, res) => {
+  try {
+    const grades = await Grade.find().populate("student");
+    res.json(grades);
+  } catch (error) {
+    console.error("Grades error", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.post("/", async (req, res) => {
+  try {
+    const { student, subject, score } = req.body;
+
+    if (!student || !subject || !score) {
+      return res.status(400).json({ message: "Fill all fields" });
+    }
+
+    const grade = new Grade({ student, subject, score });
+    await grade.save();
+
+    res.status(201).json(grade);
+  } catch (error) {
+    console.error("Error", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+module.exports = router;
+
+routes/users.js
+const express = require("express");
+const User = require("../models/User");
+
+const router = express.Router();
+
+router.get("/", async (req, res) => {
+  try {
+    const role = req.query.role;
+    const users = role ? await User.find({ role }) : await User.find();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+module.exports = router;
+
+scripts/seed.js
+require("dotenv").config();
+const mongoose = require("mongoose");
+const User = require("../models/User");
+const Grade = require("../models/Grade");
+
+const mongoURI = process.env.MONGO_URI || "mongodb://localhost:27017/diaryDB";
+
+mongoose.connect(mongoURI)
+  .then(() => console.log("Connected to DB"))
+  .catch(err => console.error("Error", err));
+
+const seedDatabase = async () => {
+  await User.deleteMany();
+  await Grade.deleteMany();
+
+  const hashedPassword = "$2b$10$DCzEHfYWtnqExOEpmaWUW.oOeGX7t3rKEo1D894ioCENHSwkm0fJm"; // 123456
+
+  const teacher1 = await User.create({ name: "Sam Smith", email: "teacher1@mail.com", password: hashedPassword, role: "teacher" });
+  const teacher2 = await User.create({ name: "John Doe", email: "teacher2@mail.com", password: hashedPassword, role: "teacher" });
+  const student1 = await User.create({ name: "Ariana Grande", email: "ariana@mail.com", password: hashedPassword, role: "student" });
+  const student2 = await User.create({ name: "Carl John", email: "carl@mail.com", password: hashedPassword, role: "student" });
+
+  await Grade.create([
+    { student: student1._id, subject: "History", score: 5 },
+    { student: student1._id, subject: "Math", score: 4 },
+    { student: student2._id, subject: "PE", score: 3 },
+    { student: student2._id, subject: "Chemistry", score: 5 }
+  ]);
+
+  console.log("Success");
+  mongoose.disconnect();
+};
+
+seedDatabase();
+
+.env
+
+MONGO_URI=mongodb://localhost:27017/diaryDB
+JWT_SECRET=supersecretkey
+
+server.js
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+require("dotenv").config();
+
+const app = express();
+
+app.use(cors());
+
+app.use(express.json({ limit: "10mb" }));
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    return res.status(400).json({ error: "JSON error" });
+  }
+  next();
+});
+
+const User = require("./models/User");
+const Grade = require("./models/Grade");
+
+const authRoutes = require("./routes/auth");
+const userRoutes = require("./routes/users");
+const gradeRoutes = require("./routes/grades");
+
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/grades", gradeRoutes);
+
+const mongoURI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/diaryDB";
+mongoose
+  .connect(mongoURI)
+  .then(() => console.log("Success db"))
+  .catch((err) => console.error("Error mongodb", err));
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(Server working ${PORT}));
+
+LoginScreen.js
+import React, { useState } from "react";
+import { View, Text, TextInput, Button } from "react-native";
+import axios from "axios";
+
+const LoginScreen = ({ navigation }) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const login = async () => {
+    try {
+      const { data } = await axios.post("http://192.168.1.72:5000/api/auth/login", { email, password });
+      alert(Welcome, ${data.role});
+      navigation.navigate(data.role === "teacher" ? "TeacherScreen" : "StudentScreen");
+    } catch {
+      alert("Error");
+    }
+  };
+
+  return (
+    <View>
+      <Text>Email:</Text>
+      <TextInput value={email} onChangeText={setEmail} />
+      <Text>Password:</Text>
+      <TextInput secureTextEntry value={password} onChangeText={setPassword} />
+      <Button title="Login" onPress={login} />
+    </View>
+  );
+};
+
+export default LoginScreen;
+
+StudentScreen.js
+import React, { useEffect, useState } from "react";
+import { View, Text, FlatList, ActivityIndicator, StyleSheet } from "react-native";
+import axios from "axios";
+
+const StudentScreen = () => {
+  const [grades, setGrades] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios.get("http://192.168.1.72:5000/api/grades")
+      .then(({ data }) => {
+        console.log("Grades:", data);
+        setGrades(data);
+      })
+      .catch((error) => {
+        console.error("Grades error:", error);
+        alert("Error");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <ActivityIndicator size="large" color="#007bff" style={styles.loader} />;
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>My Grades</Text>
+      <FlatList
+        data={grades}
+        keyExtractor={(item) => item._id}
+        ListHeaderComponent={
+          <View style={styles.tableHeader}>
+            <Text style={[styles.cell, styles.headerText]}>Subject</Text>
+            <Text style={[styles.cell, styles.headerText]}>Grades</Text>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.tableRow}>
+            <Text style={styles.cell}>{item.subject}</Text>
+            <Text style={styles.cell}>{item.score}</Text>
+          </View>
+        )}
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: "#f8f9fa",
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  tableHeader: {
+    flexDirection: "row",
+    backgroundColor: "#007bff",
+    padding: 10,
+    borderRadius: 5,
+  },
+  headerText: {
+    fontWeight: "bold",
+    color: "white",
+  },
+  tableRow: {
+    flexDirection: "row",
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ccc",
+  },
+  cell: {
+    flex: 1,
+    textAlign: "center",
+  },
+});
+
+export default StudentScreen;
+
+TeacherScreen.js
+import React, { useEffect, useState } from "react";
+import { View, Text, TextInput, Button, Alert } from "react-native";
+import axios from "axios";
+import { Picker } from "@react-native-picker/picker"; 
+
+const API_URL = "http://192.168.1.72:5000"; 
+
+const subjects = ["Math", "PE", "History", "Chemistry"]; 
+
+const TeacherScreen = () => {
+  const [students, setStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState("");
+  const [selectedSubject, setSelectedSubject] = useState(subjects[0]);
+  const [score, setScore] = useState("");
+
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const fetchStudents = async () => {
+    try {
+      const { data } = await axios.get(${API_URL}/api/users?role=student);
+      setStudents(data);
+    } catch (error) {
+      Alert.alert("Students loading error");
+    }
+  };
+
+  const addGrade = async () => {
+    if (!selectedStudent || !selectedSubject || !score) {
+      Alert.alert("Fill fields");
+      return;
+    }
+
+    try {
+      await axios.post(${API_URL}/api/grades, {
+        student: selectedStudent,
+        subject: selectedSubject,
+        score: parseInt(score),
+      });
+
+      Alert.alert("Success");
+      setScore(""); 
+    } catch (error) {
+      Alert.alert("Error");
+    }
+  };
+
+  return (
+    <View style={{ padding: 20 }}>
+      <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>Select student:</Text>
+      <Picker selectedValue={selectedStudent} onValueChange={(value) => setSelectedStudent(value)}>
+        <Picker.Item label="Select student" value="" />
+        {students.map((student) => (
+          <Picker.Item key={student._id} label={student.name} value={student._id} />
+        ))}
+      </Picker>
+
+      <Text style={{ marginTop: 20 }}>Select subject:</Text>
+      <Picker selectedValue={selectedSubject} onValueChange={(value) => setSelectedSubject(value)}>
+        {subjects.map((subject, index) => (
+          <Picker.Item key={index} label={subject} value={subject} />
+        ))}
+      </Picker>
+
+      <Text style={{ marginTop: 20 }}>Grade:</Text>
+      <TextInput 
+        value={score} 
+        onChangeText={setScore} 
+        keyboardType="numeric" 
+        placeholder=""
+        style={{ borderWidth: 1, padding: 5, marginBottom: 10 }}
+      />
+
+      <Button title="Add" onPress={addGrade} />
+    </View>
+  );
+};
+
+export default TeacherScreen;
+
+storage.js
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+export const saveToken = async (token) => {
+  await AsyncStorage.setItem("token", token);
+};
+
+export const getToken = async () => {
+  return await AsyncStorage.getItem("token");
+};
+
+export const removeToken = async () => {
+  await AsyncStorage.removeItem("token");
+};
+
+App.js
+import React from "react";
+import { NavigationContainer } from "@react-navigation/native";
+import { createStackNavigator } from "@react-navigation/stack";
+import LoginScreen from "./screens/LoginScreen";
+import StudentScreen from "./screens/StudentScreen";
+import TeacherScreen from "./screens/TeacherScreen";
+
+const Stack = createStackNavigator();
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="StudentScreen" component={StudentScreen} />
+        <Stack.Screen name="TeacherScreen" component={TeacherScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
