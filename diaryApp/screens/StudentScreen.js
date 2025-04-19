@@ -9,7 +9,7 @@ const StudentScreen = () => {
 
   const fetchGrades = async () => {
     try {
-      const token = await AsyncStorage.getItem("token"); // предполагаем, что токен хранится под ключом "token"
+      const token = await AsyncStorage.getItem("token");
 
       if (!token) {
         alert("Not authenticated");

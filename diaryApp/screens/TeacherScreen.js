@@ -13,7 +13,8 @@ const TeacherScreen = () => {
   const [selectedStudent, setSelectedStudent] = useState("");
   const [selectedSubject, setSelectedSubject] = useState(subjects[0]);
   const [score, setScore] = useState("");
-  const [editingId, setEditingId] = useState(null); 
+  const [editingId, setEditingId] = useState(null);
+
   useEffect(() => {
     fetchStudents();
     fetchGrades();
