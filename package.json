@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "expo-network": "~7.0.5",
+    "react-native-network-info": "^5.2.1"
+  }
+}

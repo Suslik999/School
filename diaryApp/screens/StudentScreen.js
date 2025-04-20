@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, ActivityIndicator, StyleSheet } from "react-native";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getGrades } from "../src/api/api.js"; 
 
 const StudentScreen = () => {
   const [grades, setGrades] = useState([]);
@@ -9,23 +9,13 @@ const StudentScreen = () => {
 
   const fetchGrades = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
       const studentId = await AsyncStorage.getItem("userId");
-  
-      if (!token || !studentId) {
+      if (!studentId) {
         alert("Not authenticated");
         return;
       }
-  
-      const { data } = await axios.get(
-        `http://192.168.1.72:5000/api/grades?student=${studentId}`,
-        {
-          headers: {
-            Authorization: token,
-          },
-        }
-      );
-  
+
+      const { data } = await getGrades(studentId);
       setGrades(data);
     } catch (error) {
       console.error("Grades error:", error);
@@ -34,7 +24,6 @@ const StudentScreen = () => {
       setLoading(false);
     }
   };
-  
 
   useEffect(() => {
     fetchGrades();

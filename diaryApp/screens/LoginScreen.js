@@ -7,8 +7,8 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { loginUser } from "../src/api/api.js"; 
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -16,10 +16,7 @@ const LoginScreen = ({ navigation }) => {
 
   const login = async () => {
     try {
-      const { data } = await axios.post("http://192.168.1.72:5000/api/auth/login", {
-        email,
-        password,
-      });
+      const { data } = await loginUser(email, password);
 
       await AsyncStorage.setItem("token", data.token);
       const decoded = parseJwt(data.token);
@@ -29,8 +26,7 @@ const LoginScreen = ({ navigation }) => {
       Alert.alert("Success", `Welcome, ${decoded.role}`);
       navigation.navigate(decoded.role === "teacher" ? "TeacherScreen" : "StudentScreen");
     } catch (error) {
-      console.error("Login error", error);
-      Alert.alert("Error", "Invalid credentials");
+      Alert.alert("Error", "Invalid login or password");
     }
   };
 

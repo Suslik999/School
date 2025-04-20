@@ -83,7 +83,13 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const grades = await Grade.find().populate("student");
+    const query = {};
+
+    if (req.query.student) {
+      query.student = req.query.student;
+    }
+
+    const grades = await Grade.find(query).populate("student");
     res.json(grades);
   } catch (error) {
     console.error("Grades error", error);
@@ -105,6 +111,46 @@ router.post("/", async (req, res) => {
     res.status(201).json(grade);
   } catch (error) {
     console.error("Error", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.put("/:id", async (req, res) => {
+  try {
+    const { student, subject, score } = req.body;
+
+    if (!student || !subject || !score) {
+      return res.status(400).json({ message: "Fill all fields" });
+    }
+
+    const updatedGrade = await Grade.findByIdAndUpdate(
+      req.params.id,
+      { student, subject, score },
+      { new: true }
+    );
+
+    if (!updatedGrade) {
+      return res.status(404).json({ message: "Grade not found" });
+    }
+
+    res.json(updatedGrade);
+  } catch (error) {
+    console.error("Update error", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const deletedGrade = await Grade.findByIdAndDelete(req.params.id);
+
+    if (!deletedGrade) {
+      return res.status(404).json({ message: "Grade not found" });
+    }
+
+    res.json({ message: "Grade deleted" });
+  } catch (error) {
+    console.error("Delete error", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -206,12 +252,20 @@ mongoose
   .catch((err) => console.error("Error mongodb", err));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(Server working ${PORT}));
+app.listen(PORT, () => console.log(`Server working ${PORT}`));
 
 LoginScreen.js
 import React, { useState } from "react";
-import { View, Text, TextInput, Button } from "react-native";
-import axios from "axios";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { loginUser } from "../src/api/api.js"; 
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -219,47 +273,140 @@ const LoginScreen = ({ navigation }) => {
 
   const login = async () => {
     try {
-      const { data } = await axios.post("http://192.168.1.72:5000/api/auth/login", { email, password });
-      alert(Welcome, ${data.role});
-      navigation.navigate(data.role === "teacher" ? "TeacherScreen" : "StudentScreen");
-    } catch {
-      alert("Error");
+      const { data } = await loginUser(email, password);
+
+      await AsyncStorage.setItem("token", data.token);
+      const decoded = parseJwt(data.token);
+      await AsyncStorage.setItem("userId", decoded.id);
+      await AsyncStorage.setItem("userRole", decoded.role);
+
+      Alert.alert("Success", `Welcome, ${decoded.role}`);
+      navigation.navigate(decoded.role === "teacher" ? "TeacherScreen" : "StudentScreen");
+    } catch (error) {
+      console.error("Login error", error);
+      Alert.alert("Error", "Invalid login or password");
+    }
+  };
+
+  const parseJwt = (token) => {
+    try {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      return JSON.parse(decodeURIComponent(atob(base64).split("").map(function (c) {
+        return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join("")));
+    } catch (e) {
+      return null;
     }
   };
 
   return (
-    <View>
-      <Text>Email:</Text>
-      <TextInput value={email} onChangeText={setEmail} />
-      <Text>Password:</Text>
-      <TextInput secureTextEntry value={password} onChangeText={setPassword} />
-      <Button title="Login" onPress={login} />
+    <View style={styles.container}>
+      <Text style={styles.title}>Login</Text>
+
+      <Text style={styles.label}>Email</Text>
+      <TextInput
+        value={email}
+        onChangeText={setEmail}
+        placeholder="Enter your email"
+        style={styles.input}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+
+      <Text style={styles.label}>Password</Text>
+      <TextInput
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Enter your password"
+        style={styles.input}
+        secureTextEntry
+      />
+
+      <TouchableOpacity style={styles.button} onPress={login}>
+        <Text style={styles.buttonText}>Login</Text>
+      </TouchableOpacity>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 24,
+    justifyContent: "center",
+    backgroundColor: "#f2f2f2",
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 32,
+    textAlign: "center",
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  button: {
+    backgroundColor: "#4a90e2",
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+});
 
 export default LoginScreen;
 
 StudentScreen.js
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, ActivityIndicator, StyleSheet } from "react-native";
-import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getGrades } from "../src/api/api.js"; 
 
 const StudentScreen = () => {
   const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchGrades = async () => {
+    try {
+      const studentId = await AsyncStorage.getItem("userId");
+      if (!studentId) {
+        alert("Not authenticated");
+        return;
+      }
+
+      const { data } = await getGrades(studentId);
+      setGrades(data);
+    } catch (error) {
+      console.error("Grades error:", error);
+      alert("Failed to load grades");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    axios.get("http://192.168.1.72:5000/api/grades")
-      .then(({ data }) => {
-        console.log("Grades:", data);
-        setGrades(data);
-      })
-      .catch((error) => {
-        console.error("Grades error:", error);
-        alert("Error");
-      })
-      .finally(() => setLoading(false));
+    fetchGrades();
   }, []);
 
   if (loading) {
@@ -308,7 +455,7 @@ const styles = StyleSheet.create({
   },
   tableHeader: {
     flexDirection: "row",
-    backgroundColor: "#007bff",
+    backgroundColor: "#4a90e2",
     padding: 10,
     borderRadius: 5,
   },
@@ -332,85 +479,318 @@ export default StudentScreen;
 
 TeacherScreen.js
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, Button, Alert } from "react-native";
-import axios from "axios";
-import { Picker } from "@react-native-picker/picker"; 
+import {
+  View,
+  Text,
+  TextInput,
+  Alert,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+} from "react-native";
+import { Picker } from "@react-native-picker/picker";
+import {
+  getStudents,
+  getAllGrades,
+  addGrade,
+  updateGrade,
+  deleteGrade,
+} from "../src/api/api.js"; 
 
-const API_URL = "http://192.168.1.72:5000"; 
-
-const subjects = ["Math", "PE", "History", "Chemistry"]; 
+const subjects = ["Math", "PE", "History", "Chemistry"];
 
 const TeacherScreen = () => {
   const [students, setStudents] = useState([]);
+  const [grades, setGrades] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState("");
   const [selectedSubject, setSelectedSubject] = useState(subjects[0]);
   const [score, setScore] = useState("");
+  const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
     fetchStudents();
+    fetchGrades();
   }, []);
 
   const fetchStudents = async () => {
     try {
-      const { data } = await axios.get(${API_URL}/api/users?role=student);
+      const { data } = await getStudents();
       setStudents(data);
     } catch (error) {
-      Alert.alert("Students loading error");
+      Alert.alert("Error loading students");
     }
   };
 
-  const addGrade = async () => {
+  const fetchGrades = async () => {
+    try {
+      const { data } = await getAllGrades();
+      setGrades(data);
+    } catch (error) {
+      Alert.alert("Error loading grades");
+    }
+  };
+
+  const resetForm = () => {
+    setSelectedSubject(subjects[0]);
+    setScore("");
+    setEditingId(null);
+  };
+
+  const handleSubmit = async () => {
     if (!selectedStudent || !selectedSubject || !score) {
-      Alert.alert("Fill fields");
-      return;
+      return Alert.alert("Fill all fields");
     }
 
     try {
-      await axios.post(${API_URL}/api/grades, {
+      const data = {
         student: selectedStudent,
         subject: selectedSubject,
         score: parseInt(score),
-      });
+      };
 
-      Alert.alert("Success");
-      setScore(""); 
+      if (editingId) {
+        await updateGrade(editingId, data);
+        Alert.alert("Grade updated");
+      } else {
+        await addGrade(data);
+        Alert.alert("Grade added");
+      }
+
+      fetchGrades();
+      resetForm();
     } catch (error) {
-      Alert.alert("Error");
+      Alert.alert("Submit error");
     }
   };
 
+  const handleEdit = (grade) => {
+    setSelectedSubject(grade.subject);
+    setScore(grade.score.toString());
+    setEditingId(grade._id);
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await deleteGrade(id);
+      Alert.alert("Grade deleted");
+      fetchGrades();
+    } catch (error) {
+      Alert.alert("Delete error");
+    }
+  };
+
+  const filteredGrades = grades.filter((g) => g.student?._id === selectedStudent);
+
   return (
-    <View style={{ padding: 20 }}>
-      <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>Select student:</Text>
-      <Picker selectedValue={selectedStudent} onValueChange={(value) => setSelectedStudent(value)}>
+    <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 40 }}>
+      <Text style={styles.title}>Manage Grades</Text>
+
+      <Text style={styles.label}>Select student:</Text>
+      <Picker
+        selectedValue={selectedStudent}
+        onValueChange={setSelectedStudent}
+        style={styles.picker}
+      >
         <Picker.Item label="Select student" value="" />
-        {students.map((student) => (
-          <Picker.Item key={student._id} label={student.name} value={student._id} />
+        {students.map((s) => (
+          <Picker.Item key={s._id} label={s.name} value={s._id} />
         ))}
       </Picker>
 
-      <Text style={{ marginTop: 20 }}>Select subject:</Text>
-      <Picker selectedValue={selectedSubject} onValueChange={(value) => setSelectedSubject(value)}>
-        {subjects.map((subject, index) => (
-          <Picker.Item key={index} label={subject} value={subject} />
-        ))}
-      </Picker>
+      {selectedStudent !== "" && (
+        <>
+          <Text style={styles.label}>Select subject:</Text>
+          <Picker
+            selectedValue={selectedSubject}
+            onValueChange={setSelectedSubject}
+            style={styles.picker}
+          >
+            {subjects.map((subject, index) => (
+              <Picker.Item key={index} label={subject} value={subject} />
+            ))}
+          </Picker>
 
-      <Text style={{ marginTop: 20 }}>Grade:</Text>
-      <TextInput 
-        value={score} 
-        onChangeText={setScore} 
-        keyboardType="numeric" 
-        placeholder=""
-        style={{ borderWidth: 1, padding: 5, marginBottom: 10 }}
-      />
+          <Text style={styles.label}>Grade:</Text>
+          <TextInput
+            value={score}
+            onChangeText={setScore}
+            keyboardType="numeric"
+            style={styles.input}
+          />
 
-      <Button title="Add" onPress={addGrade} />
-    </View>
+          <TouchableOpacity style={styles.addButton} onPress={handleSubmit}>
+            <Text style={styles.addButtonText}>
+              {editingId ? "Update Grade" : "Add Grade"}
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={[styles.title, { marginTop: 30 }]}>Grades of Selected Student</Text>
+
+          {filteredGrades.length === 0 ? (
+            <Text style={{ color: "#888", fontStyle: "italic" }}>No grades yet</Text>
+          ) : (
+            <FlatList
+              data={filteredGrades}
+              keyExtractor={(item) => item._id}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <View style={styles.gradeItem}>
+                  <Text style={styles.gradeText}>
+                    {item.subject}: {item.score}
+                  </Text>
+                  <View style={styles.buttons}>
+                    <TouchableOpacity style={styles.editButton} onPress={() => handleEdit(item)}>
+                      <Text style={styles.buttonText}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(item._id)}>
+                      <Text style={styles.buttonText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            />
+          )}
+        </>
+      )}
+    </ScrollView>
   );
 };
 
+const styles = StyleSheet.create({
+  scroll: {
+    padding: 20,
+  },
+  title: {
+    fontWeight: "bold",
+    fontSize: 24,
+    marginBottom: 15,
+    color: "#333",
+    textAlign: "center",
+  },
+  label: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#555",
+  },
+  picker: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    backgroundColor: "#f5f5f5",
+    marginBottom: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+    fontSize: 16,
+  },
+  addButton: {
+    backgroundColor: "#4a90e2",
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginTop: 10,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+  },
+  gradeItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
+    padding: 12,
+    marginVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  gradeText: {
+    flex: 1,
+    fontSize: 16,
+    color: "#333",
+  },
+  buttons: {
+    flexDirection: "row",
+  },
+  editButton: {
+    backgroundColor: "#4a90e2",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  deleteButton: {
+    backgroundColor: "#e94e4e",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+});
+
 export default TeacherScreen;
+
+src/api/api.js
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const BASE_URL = "http://192.168.1.72:5000";
+
+const getAuthHeader = async () => {
+  const token = await AsyncStorage.getItem("token");
+  return { Authorization: token };
+};
+
+export const loginUser = (email, password) =>
+  axios.post(`${BASE_URL}/api/auth/login`, { email, password });
+
+export const getGrades = async (studentId) =>
+  axios.get(`${BASE_URL}/api/grades?student=${studentId}`, {
+    headers: await getAuthHeader(),
+  });
+
+export const getAllGrades = async () =>
+  axios.get(`${BASE_URL}/api/grades`, {
+    headers: await getAuthHeader(),
+  });
+
+export const addGrade = async (gradeData) =>
+  axios.post(`${BASE_URL}/api/grades`, gradeData, {
+    headers: await getAuthHeader(),
+  });
+
+export const updateGrade = async (id, gradeData) =>
+  axios.put(`${BASE_URL}/api/grades/${id}`, gradeData, {
+    headers: await getAuthHeader(),
+  });
+
+export const deleteGrade = async (id) =>
+  axios.delete(`${BASE_URL}/api/grades/${id}`, {
+    headers: await getAuthHeader(),
+  });
+
+export const getStudents = async () =>
+  axios.get(`${BASE_URL}/api/users?role=student`, {
+    headers: await getAuthHeader(),
+  });
+
 
 storage.js
 import AsyncStorage from "@react-native-async-storage/async-storage";

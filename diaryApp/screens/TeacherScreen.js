@@ -1,13 +1,23 @@
 import React, { useEffect, useState } from "react";
 import {
-  View, Text, TextInput, Alert,
-  FlatList, TouchableOpacity, StyleSheet, ScrollView
+  View,
+  Text,
+  TextInput,
+  Alert,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
 } from "react-native";
-import axios from "axios";
 import { Picker } from "@react-native-picker/picker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  getStudents,
+  getAllGrades,
+  addGrade,
+  updateGrade,
+  deleteGrade,
+} from "../src/api/api.js"; 
 
-const API_URL = "http://192.168.1.72:5000";
 const subjects = ["Math", "PE", "History", "Chemistry"];
 
 const TeacherScreen = () => {
@@ -23,18 +33,9 @@ const TeacherScreen = () => {
     fetchGrades();
   }, []);
 
-  const fetchToken = async () => {
-    const token = await AsyncStorage.getItem("token");
-    if (!token) throw new Error("Unauthorized");
-    return token;
-  };
-
   const fetchStudents = async () => {
     try {
-      const token = await fetchToken();
-      const { data } = await axios.get(`${API_URL}/api/users?role=student`, {
-        headers: { Authorization: token },
-      });
+      const { data } = await getStudents();
       setStudents(data);
     } catch (error) {
       Alert.alert("Error loading students");
@@ -43,10 +44,7 @@ const TeacherScreen = () => {
 
   const fetchGrades = async () => {
     try {
-      const token = await fetchToken();
-      const { data } = await axios.get(`${API_URL}/api/grades`, {
-        headers: { Authorization: token },
-      });
+      const { data } = await getAllGrades();
       setGrades(data);
     } catch (error) {
       Alert.alert("Error loading grades");
@@ -60,37 +58,38 @@ const TeacherScreen = () => {
   };
 
   const handleSubmit = async () => {
-    if (!selectedStudent || !selectedSubject || !score) {
+    if (!selectedStudent || !selectedSubject || score === "") {
       return Alert.alert("Fill all fields");
     }
-
+  
+    const numericScore = parseInt(score);
+  
+    if (isNaN(numericScore) || numericScore < 1 || numericScore > 5) {
+      return Alert.alert("Grade must be a number between 1 and 5");
+    }
+    
     try {
-      const token = await fetchToken();
       const data = {
         student: selectedStudent,
         subject: selectedSubject,
-        score: parseInt(score),
+        score: numericScore,
       };
-
+  
       if (editingId) {
-        await axios.put(`${API_URL}/api/grades/${editingId}`, data, {
-          headers: { Authorization: token },
-        });
+        await updateGrade(editingId, data);
         Alert.alert("Grade updated");
       } else {
-        await axios.post(`${API_URL}/api/grades`, data, {
-          headers: { Authorization: token },
-        });
+        await addGrade(data);
         Alert.alert("Grade added");
       }
-
+  
       fetchGrades();
       resetForm();
     } catch (error) {
       Alert.alert("Submit error");
     }
   };
-
+  
   const handleEdit = (grade) => {
     setSelectedSubject(grade.subject);
     setScore(grade.score.toString());
@@ -99,10 +98,7 @@ const TeacherScreen = () => {
 
   const handleDelete = async (id) => {
     try {
-      const token = await fetchToken();
-      await axios.delete(`${API_URL}/api/grades/${id}`, {
-        headers: { Authorization: token },
-      });
+      await deleteGrade(id);
       Alert.alert("Grade deleted");
       fetchGrades();
     } catch (error) {
@@ -113,10 +109,7 @@ const TeacherScreen = () => {
   const filteredGrades = grades.filter((g) => g.student?._id === selectedStudent);
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={{ paddingBottom: 40 }}
-    >
+    <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 40 }}>
       <Text style={styles.title}>Manage Grades</Text>
 
       <Text style={styles.label}>Select student:</Text>

@@ -23,8 +23,12 @@ router.post("/", async (req, res) => {
   try {
     const { student, subject, score } = req.body;
 
-    if (!student || !subject || !score) {
+    if (!student || !subject || score == null) {
       return res.status(400).json({ message: "Fill all fields" });
+    }
+
+    if (score < 1 || score > 5) {
+      return res.status(400).json({ message: "Grade must be between 1 and 5" });
     }
 
     const grade = new Grade({ student, subject, score });
@@ -41,8 +45,12 @@ router.put("/:id", async (req, res) => {
   try {
     const { student, subject, score } = req.body;
 
-    if (!student || !subject || !score) {
+    if (!student || !subject || score == null) {
       return res.status(400).json({ message: "Fill all fields" });
+    }
+
+    if (score < 1 || score > 5) {
+      return res.status(400).json({ message: "Grade must be between 1 and 5" });
     }
 
     const updatedGrade = await Grade.findByIdAndUpdate(
