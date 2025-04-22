@@ -10,13 +10,17 @@ import {
   ScrollView,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
+import NetInfo from "@react-native-community/netinfo";
 import {
   getStudents,
   getAllGrades,
   addGrade,
   updateGrade,
   deleteGrade,
-} from "../src/api/api.js"; 
+  syncOfflineGrades,
+  queueOfflineUpdate,
+  queueOfflineDelete,
+} from "../src/api/api.js";
 
 const subjects = ["Math", "PE", "History", "Chemistry"];
 
@@ -29,9 +33,18 @@ const TeacherScreen = () => {
   const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
-    fetchStudents();
-    fetchGrades();
+    initializeScreen();
   }, []);
+
+  const initializeScreen = async () => {
+    try {
+      await syncOfflineGrades();
+      await fetchStudents();
+      await fetchGrades();
+    } catch (err) {
+      console.log("Init error:", err);
+    }
+  };
 
   const fetchStudents = async () => {
     try {
@@ -47,7 +60,6 @@ const TeacherScreen = () => {
       const { data } = await getAllGrades();
       setGrades(data);
     } catch (error) {
-      Alert.alert("Error loading grades");
     }
   };
 
@@ -61,35 +73,43 @@ const TeacherScreen = () => {
     if (!selectedStudent || !selectedSubject || score === "") {
       return Alert.alert("Fill all fields");
     }
-  
+
     const numericScore = parseInt(score);
-  
     if (isNaN(numericScore) || numericScore < 1 || numericScore > 5) {
       return Alert.alert("Grade must be a number between 1 and 5");
     }
-    
+
+    const gradeData = {
+      student: selectedStudent,
+      subject: selectedSubject,
+      score: numericScore,
+    };
+
     try {
-      const data = {
-        student: selectedStudent,
-        subject: selectedSubject,
-        score: numericScore,
-      };
-  
+      const net = await NetInfo.fetch();
+      const isOnline = net.isConnected;
+
       if (editingId) {
-        await updateGrade(editingId, data);
-        Alert.alert("Grade updated");
+        if (isOnline) {
+          await updateGrade(editingId, gradeData);
+          Alert.alert("Grade updated");
+        } else {
+          await queueOfflineUpdate(editingId, gradeData);
+          Alert.alert("Offline: grade update queued");
+        }
       } else {
-        await addGrade(data);
-        Alert.alert("Grade added");
+        await addGrade(gradeData); 
+        Alert.alert(isOnline ? "Grade added" : "Offline: grade queued");
       }
-  
-      fetchGrades();
+
+      await syncOfflineGrades();
+      await fetchGrades();
       resetForm();
     } catch (error) {
       Alert.alert("Submit error");
     }
   };
-  
+
   const handleEdit = (grade) => {
     setSelectedSubject(grade.subject);
     setScore(grade.score.toString());
@@ -98,9 +118,19 @@ const TeacherScreen = () => {
 
   const handleDelete = async (id) => {
     try {
-      await deleteGrade(id);
-      Alert.alert("Grade deleted");
-      fetchGrades();
+      const net = await NetInfo.fetch();
+      const isOnline = net.isConnected;
+
+      if (isOnline) {
+        await deleteGrade(id);
+        Alert.alert("Grade deleted");
+      } else {
+        await queueOfflineDelete(id);
+        Alert.alert("Offline: delete queued");
+      }
+
+      await syncOfflineGrades();
+      await fetchGrades();
     } catch (error) {
       Alert.alert("Delete error");
     }
@@ -111,6 +141,10 @@ const TeacherScreen = () => {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 40 }}>
       <Text style={styles.title}>Manage Grades</Text>
+
+      <TouchableOpacity style={styles.refreshButton} onPress={initializeScreen}>
+        <Text style={styles.refreshButtonText}>🔄 Refresh</Text>
+      </TouchableOpacity>
 
       <Text style={styles.label}>Select student:</Text>
       <Picker
@@ -184,9 +218,7 @@ const TeacherScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  scroll: {
-    padding: 20,
-  },
+  scroll: { padding: 20 },
   title: {
     fontWeight: "bold",
     fontSize: 24,
@@ -221,17 +253,24 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 10,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
   },
   addButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
     textTransform: "uppercase",
+  },
+  refreshButton: {
+    alignSelf: "flex-end",
+    marginBottom: 10,
+    backgroundColor: "#eee",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  refreshButtonText: {
+    color: "#333",
+    fontWeight: "600",
   },
   gradeItem: {
     flexDirection: "row",

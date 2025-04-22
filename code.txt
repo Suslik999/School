@@ -21,7 +21,12 @@ const GradeSchema = new mongoose.Schema(
   {
     student: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     subject: { type: String, required: true },
-    score: { type: Number, required: true },
+    score: { 
+      type: Number, 
+      required: true,
+      min: 1,
+      max: 5,
+    },
   },
   { timestamps: true }
 );
@@ -283,7 +288,6 @@ const LoginScreen = ({ navigation }) => {
       Alert.alert("Success", `Welcome, ${decoded.role}`);
       navigation.navigate(decoded.role === "teacher" ? "TeacherScreen" : "StudentScreen");
     } catch (error) {
-      console.error("Login error", error);
       Alert.alert("Error", "Invalid login or password");
     }
   };
@@ -538,17 +542,23 @@ const TeacherScreen = () => {
   };
 
   const handleSubmit = async () => {
-    if (!selectedStudent || !selectedSubject || !score) {
+    if (!selectedStudent || !selectedSubject || score === "") {
       return Alert.alert("Fill all fields");
     }
-
+  
+    const numericScore = parseInt(score);
+  
+    if (isNaN(numericScore) || numericScore < 1 || numericScore > 5) {
+      return Alert.alert("Grade must be a number between 1 and 5");
+    }
+    
     try {
       const data = {
         student: selectedStudent,
         subject: selectedSubject,
-        score: parseInt(score),
+        score: numericScore,
       };
-
+  
       if (editingId) {
         await updateGrade(editingId, data);
         Alert.alert("Grade updated");
@@ -556,14 +566,14 @@ const TeacherScreen = () => {
         await addGrade(data);
         Alert.alert("Grade added");
       }
-
+  
       fetchGrades();
       resetForm();
     } catch (error) {
       Alert.alert("Submit error");
     }
   };
-
+  
   const handleEdit = (grade) => {
     setSelectedSubject(grade.subject);
     setScore(grade.score.toString());
